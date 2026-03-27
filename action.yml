@@ -1,7 +1,7 @@
 name: Twitter Post
 description: >
   Reads recent blog posts, generates tweets via Claude,
-  and posts to Twitter/X — automatically.
+  and posts to Twitter/X via Zernio — automatically.
 
 inputs:
   anthropic_api_key:
@@ -10,18 +10,12 @@ inputs:
   github_token:
     description: GitHub token with repo permissions (to commit history)
     required: true
-  twitter_api_key:
-    description: Twitter API key (consumer key)
+  zernio_api_key:
+    description: Zernio API key (sk_...)
     required: true
-  twitter_api_secret:
-    description: Twitter API key secret (consumer secret)
-    required: true
-  twitter_access_token:
-    description: Twitter access token
-    required: true
-  twitter_access_secret:
-    description: Twitter access token secret
-    required: true
+  twitter_account_id:
+    description: "Zernio account ID for the Twitter account (acc_...). If omitted, uses the first connected Twitter account."
+    default: ""
   site_url:
     description: The site's public URL (e.g. https://semguns.com)
     required: true
@@ -59,10 +53,8 @@ runs:
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
-        TWITTER_API_KEY: ${{ inputs.twitter_api_key }}
-        TWITTER_API_SECRET: ${{ inputs.twitter_api_secret }}
-        TWITTER_ACCESS_TOKEN: ${{ inputs.twitter_access_token }}
-        TWITTER_ACCESS_SECRET: ${{ inputs.twitter_access_secret }}
+        ZERNIO_API_KEY: ${{ inputs.zernio_api_key }}
+        TWITTER_ACCOUNT_ID: ${{ inputs.twitter_account_id }}
         GITHUB_REPO: ${{ github.repository }}
         SITE_URL: ${{ inputs.site_url }}
         BRAND_VOICE: ${{ inputs.brand_voice }}

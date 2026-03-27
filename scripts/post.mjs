@@ -1,23 +1,49 @@
-import { TwitterApi } from "twitter-api-v2";
+import Zernio from "@zernio/node";
 
-export async function postTweet({
-  text,
-  apiKey,
-  apiSecret,
-  accessToken,
-  accessSecret,
-}) {
-  const client = new TwitterApi({
-    appKey: apiKey,
-    appSecret: apiSecret,
-    accessToken,
-    accessSecret,
+let _client = null;
+
+function getClient() {
+  if (!_client) {
+    _client = new Zernio(); // reads ZERNIO_API_KEY from env
+  }
+  return _client;
+}
+
+export async function resolveTwitterAccountId(accountId) {
+  if (accountId) return accountId;
+
+  // No account ID provided — find the first connected Twitter account
+  const zernio = getClient();
+  const { data: accounts } = await zernio.accounts.listAccounts();
+  const twitter = accounts.find((a) => a.platform === "twitter");
+
+  if (!twitter) {
+    throw new Error(
+      "No Twitter account connected to Zernio. Connect one at https://zernio.com or pass twitter_account_id."
+    );
+  }
+
+  console.log("  Auto-detected Twitter account: " + twitter._id);
+  return twitter._id;
+}
+
+export async function postTweet({ text, accountId }) {
+  const zernio = getClient();
+
+  const { data: post } = await zernio.posts.createPost({
+    body: {
+      content: text,
+      platforms: [{ platform: "twitter", accountId }],
+      publishNow: true,
+    },
   });
 
-  const { data } = await client.v2.tweet(text);
+  // Extract the Twitter post URL from the response
+  const twitterResult = post.platforms?.find((p) => p.platform === "twitter");
+  const postUrl = twitterResult?.platformPostUrl || null;
 
   return {
-    id: data.id,
-    url: "https://twitter.com/i/status/" + data.id,
+    id: post._id,
+    url: postUrl,
   };
 }

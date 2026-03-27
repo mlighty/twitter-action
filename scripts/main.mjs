@@ -2,67 +2,38 @@
 
 import { scanBlogPosts, pickPost } from "./content.mjs";
 import { generateTweet } from "./generate.mjs";
-import { postTweet } from "./post.mjs";
+import { postTweet, resolveTwitterAccountId } from "./post.mjs";
 import { readHistory, writeHistory, addEntry } from "./history.mjs";
 import { commitHistory } from "./commit.mjs";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO;
-const TWITTER_API_KEY = process.env.TWITTER_API_KEY;
-const TWITTER_API_SECRET = process.env.TWITTER_API_SECRET;
-const TWITTER_ACCESS_TOKEN = process.env.TWITTER_ACCESS_TOKEN;
-const TWITTER_ACCESS_SECRET = process.env.TWITTER_ACCESS_SECRET;
+const ZERNIO_API_KEY = process.env.ZERNIO_API_KEY;
+const TWITTER_ACCOUNT_ID = process.env.TWITTER_ACCOUNT_ID || "";
 const SITE_URL = process.env.SITE_URL;
 const BRAND_VOICE = process.env.BRAND_VOICE || "";
 const POSTS_PER_RUN = parseInt(process.env.POSTS_PER_RUN || "1", 10);
 const DRY_RUN = process.env.DRY_RUN === "true";
 
 function validateEnv() {
-  const required = {
-    ANTHROPIC_API_KEY,
-    GITHUB_TOKEN,
-    GITHUB_REPO,
-    TWITTER_API_KEY,
-    TWITTER_API_SECRET,
-    TWITTER_ACCESS_TOKEN,
-    TWITTER_ACCESS_SECRET,
-    SITE_URL,
-  };
+  const required = { ANTHROPIC_API_KEY, GITHUB_TOKEN, GITHUB_REPO, SITE_URL };
   const missing = Object.entries(required)
     .filter(([, v]) => !v)
     .map(([k]) => k);
   if (missing.length > 0) {
-    // Allow missing Twitter creds in dry-run mode
-    const twitterKeys = [
-      "TWITTER_API_KEY",
-      "TWITTER_API_SECRET",
-      "TWITTER_ACCESS_TOKEN",
-      "TWITTER_ACCESS_SECRET",
-    ];
-    const nonTwitterMissing = missing.filter((k) => !twitterKeys.includes(k));
-    const twitterMissing = missing.filter((k) => twitterKeys.includes(k));
-
-    if (nonTwitterMissing.length > 0) {
-      console.error(
-        "Missing required environment variables: " + nonTwitterMissing.join(", ")
-      );
-      process.exit(1);
-    }
-    if (twitterMissing.length > 0 && !DRY_RUN) {
-      console.error(
-        "Missing Twitter credentials: " +
-          twitterMissing.join(", ") +
-          " (required unless dry_run is true)"
-      );
-      process.exit(1);
-    }
+    console.error("Missing required environment variables: " + missing.join(", "));
+    process.exit(1);
+  }
+  if (!ZERNIO_API_KEY && !DRY_RUN) {
+    console.error("Missing ZERNIO_API_KEY (required unless dry_run is true)");
+    process.exit(1);
   }
 }
 
 async function main() {
   console.log("=".repeat(60));
-  console.log("  Twitter Post Action");
+  console.log("  Twitter Post Action (via Zernio)");
   console.log("=".repeat(60));
   console.log("Site:    " + SITE_URL);
   console.log("Repo:    " + GITHUB_REPO);
@@ -72,6 +43,13 @@ async function main() {
   console.log("=".repeat(60));
 
   validateEnv();
+
+  // Resolve Twitter account ID (auto-detect if not provided)
+  let accountId = TWITTER_ACCOUNT_ID;
+  if (!DRY_RUN) {
+    accountId = await resolveTwitterAccountId(TWITTER_ACCOUNT_ID);
+    console.log("Account: " + accountId);
+  }
 
   const repoRoot = process.cwd();
   const posts = scanBlogPosts(repoRoot);
@@ -95,9 +73,7 @@ async function main() {
     }
 
     const { post, format } = pick;
-    console.log(
-      "\n--- Tweet " + (i + 1) + " of " + POSTS_PER_RUN + " ---"
-    );
+    console.log("\n--- Tweet " + (i + 1) + " of " + POSTS_PER_RUN + " ---");
     console.log("Post:   " + post.title);
     console.log("File:   " + post.file);
     console.log("Format: " + format);
@@ -117,7 +93,6 @@ async function main() {
 
     if (DRY_RUN) {
       console.log("\n  [DRY RUN — not posted]");
-      // Still track in history so next pick is different
       addEntry(history, {
         file: post.file,
         title: post.title,
@@ -125,7 +100,7 @@ async function main() {
         date: new Date().toISOString().split("T")[0],
         tweetText: tweet,
         postUrl,
-        tweetId: null,
+        zernioPostId: null,
         tweetUrl: null,
         dryRun: true,
       });
@@ -133,17 +108,11 @@ async function main() {
       continue;
     }
 
-    // Post to Twitter
-    console.log("Posting to Twitter...");
-    const result = await postTweet({
-      text: tweet,
-      apiKey: TWITTER_API_KEY,
-      apiSecret: TWITTER_API_SECRET,
-      accessToken: TWITTER_ACCESS_TOKEN,
-      accessSecret: TWITTER_ACCESS_SECRET,
-    });
+    // Post via Zernio
+    console.log("Posting to Twitter via Zernio...");
+    const result = await postTweet({ text: tweet, accountId });
 
-    console.log("  Posted: " + result.url);
+    console.log("  Posted: " + (result.url || "ID " + result.id));
 
     addEntry(history, {
       file: post.file,
@@ -152,7 +121,7 @@ async function main() {
       date: new Date().toISOString().split("T")[0],
       tweetText: tweet,
       postUrl,
-      tweetId: result.id,
+      zernioPostId: result.id,
       tweetUrl: result.url,
     });
 
