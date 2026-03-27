@@ -16,10 +16,10 @@ export async function resolveTwitterAccountId(accountId) {
   const zernio = getClient();
   const response = await zernio.accounts.listAccounts();
 
-  // Handle different SDK response shapes
+  // Handle SDK response: { data: { accounts: [...] } }
   const accounts = Array.isArray(response)
     ? response
-    : response.data || response.accounts || [];
+    : response.data?.accounts || response.accounts || response.data || [];
 
   if (!Array.isArray(accounts)) {
     console.log("  Unexpected accounts response: " + JSON.stringify(response).slice(0, 500));
