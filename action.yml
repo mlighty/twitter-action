@@ -1,0 +1,70 @@
+name: Twitter Post
+description: >
+  Reads recent blog posts, generates tweets via Claude,
+  and posts to Twitter/X — automatically.
+
+inputs:
+  anthropic_api_key:
+    description: Anthropic API key for Claude
+    required: true
+  github_token:
+    description: GitHub token with repo permissions (to commit history)
+    required: true
+  twitter_api_key:
+    description: Twitter API key (consumer key)
+    required: true
+  twitter_api_secret:
+    description: Twitter API key secret (consumer secret)
+    required: true
+  twitter_access_token:
+    description: Twitter access token
+    required: true
+  twitter_access_secret:
+    description: Twitter access token secret
+    required: true
+  site_url:
+    description: The site's public URL (e.g. https://semguns.com)
+    required: true
+  brand_voice:
+    description: Short description of the brand voice for tweet generation
+    default: ""
+  posts_per_run:
+    description: Number of tweets to post per run
+    default: "1"
+  dry_run:
+    description: "true to generate tweets without posting"
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install action dependencies
+      shell: bash
+      run: npm ci
+      working-directory: ${{ github.action_path }}
+
+    - name: Checkout site repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Run Twitter post pipeline
+      shell: bash
+      run: node ${{ github.action_path }}/scripts/main.mjs
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        TWITTER_API_KEY: ${{ inputs.twitter_api_key }}
+        TWITTER_API_SECRET: ${{ inputs.twitter_api_secret }}
+        TWITTER_ACCESS_TOKEN: ${{ inputs.twitter_access_token }}
+        TWITTER_ACCESS_SECRET: ${{ inputs.twitter_access_secret }}
+        GITHUB_REPO: ${{ github.repository }}
+        SITE_URL: ${{ inputs.site_url }}
+        BRAND_VOICE: ${{ inputs.brand_voice }}
+        POSTS_PER_RUN: ${{ inputs.posts_per_run }}
+        DRY_RUN: ${{ inputs.dry_run }}
