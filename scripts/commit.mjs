@@ -69,8 +69,8 @@ export async function commitHistory({ repoRoot, repo, token }) {
       tree: newTree.sha,
       parents: [baseSha],
       author: {
-        name: "twitter-action",
-        email: "noreply@github.com",
+        name: "mlighty",
+        email: "oriems@gmail.com",
         date: new Date().toISOString(),
       },
     },
