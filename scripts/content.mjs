@@ -49,16 +49,62 @@ export function scanBlogPosts(repoRoot) {
   return posts.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }
 
-export function pickPost(posts, history) {
+function weightedRandomFormat(formats, weights) {
+  const rand = Math.random();
+  let cumulative = 0;
+  for (const format of formats) {
+    cumulative += weights[format] || 1 / formats.length;
+    if (rand < cumulative) return format;
+  }
+  return formats[formats.length - 1];
+}
+
+function selectFormat(usedFormats, strategy) {
+  const unused = FORMATS.filter((f) => !usedFormats.includes(f));
+  if (unused.length === 0) return FORMATS[0];
+
+  if (strategy?.formatWeights) {
+    // Re-normalize weights to only unused formats
+    const total = unused.reduce((s, f) => s + (strategy.formatWeights[f] || 0), 0);
+    if (total > 0) {
+      const normalized = {};
+      for (const f of unused) {
+        normalized[f] = (strategy.formatWeights[f] || 0) / total;
+      }
+      return weightedRandomFormat(unused, normalized);
+    }
+  }
+
+  return unused[0];
+}
+
+export function pickPost(posts, history, strategy) {
   const promoted = history.posts || [];
+
+  // Build topic boost map from strategy
+  const topicBoost = new Map();
+  if (strategy?.topTopics) {
+    for (const t of strategy.topTopics) {
+      topicBoost.set(t.tag, t.avgEngagement);
+    }
+  }
 
   // Find posts not yet promoted at all
   const unpromoted = posts.filter(
     (p) => !promoted.some((h) => h.file === p.file)
   );
 
+  // Sort by topic engagement score if strategy available
+  if (topicBoost.size > 0 && unpromoted.length > 1) {
+    unpromoted.sort((a, b) => {
+      const scoreA = (a.tags || []).reduce((s, t) => s + (topicBoost.get(t) || 0), 0);
+      const scoreB = (b.tags || []).reduce((s, t) => s + (topicBoost.get(t) || 0), 0);
+      return scoreB - scoreA;
+    });
+  }
+
   if (unpromoted.length > 0) {
-    return { post: unpromoted[0], format: FORMATS[0] };
+    return { post: unpromoted[0], format: selectFormat([], strategy) };
   }
 
   // All promoted at least once — find one with unused formats
@@ -68,7 +114,7 @@ export function pickPost(posts, history) {
       .map((h) => h.format);
     const unused = FORMATS.filter((f) => !usedFormats.includes(f));
     if (unused.length > 0) {
-      return { post, format: unused[0] };
+      return { post, format: selectFormat(usedFormats, strategy) };
     }
   }
 
@@ -78,7 +124,7 @@ export function pickPost(posts, history) {
       a.date.localeCompare(b.date)
     )[0];
     const post = posts.find((p) => p.file === oldest?.file) || posts[0];
-    return { post, format: FORMATS[0] };
+    return { post, format: selectFormat([], strategy) };
   }
 
   return null;

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import { scanBlogPosts, pickPost } from "./content.mjs";
+import { scanBlogPosts, pickPost, FORMATS } from "./content.mjs";
 import { generateTweet } from "./generate.mjs";
 import { postTweet, resolveTwitterAccountId } from "./post.mjs";
 import { readHistory, writeHistory, addEntry } from "./history.mjs";
 import { commitHistory } from "./commit.mjs";
+import { collectMetrics, buildStrategy } from "./analytics.mjs";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -63,10 +64,36 @@ async function main() {
   const history = readHistory(repoRoot);
   console.log("History: " + history.posts.length + " prior tweet(s).");
 
+  // --- Collect engagement metrics for past posts ---
+  if (!DRY_RUN) {
+    const postsNeedingMetrics = history.posts.filter(
+      (p) => p.zernioPostId && p.zernioPostId !== "unknown" && !p.metrics
+    );
+    if (postsNeedingMetrics.length > 0) {
+      console.log("\n--- Engagement metrics ---");
+      console.log("Collecting metrics for " + postsNeedingMetrics.length + " post(s)...");
+      const collected = await collectMetrics(history);
+      console.log("Collected: " + collected);
+    }
+  }
+
+  // --- Build strategy from collected metrics ---
+  const strategy = buildStrategy(history, posts, FORMATS);
+  if (strategy) {
+    console.log("\n--- Strategy ---");
+    console.log("Sample: " + strategy.sampleSize + " posts with metrics");
+    console.log("Weights: " + JSON.stringify(strategy.formatWeights));
+    if (strategy.topTopics.length > 0) {
+      console.log("Top topics: " + strategy.topTopics.slice(0, 3).map((t) => t.tag).join(", "));
+    }
+  } else {
+    console.log("\nStrategy: not enough data yet — using defaults.");
+  }
+
   let posted = 0;
 
   for (let i = 0; i < POSTS_PER_RUN; i++) {
-    const pick = pickPost(posts, history);
+    const pick = pickPost(posts, history, strategy);
     if (!pick) {
       console.log("\nNo posts available to tweet.");
       break;
@@ -86,6 +113,7 @@ async function main() {
       siteUrl: SITE_URL,
       brandVoice: BRAND_VOICE,
       apiKey: ANTHROPIC_API_KEY,
+      strategy,
     });
 
     console.log("\nTweet (" + tweet.length + " chars):");

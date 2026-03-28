@@ -1,5 +1,24 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+function buildExemplarSection(strategy) {
+  if (!strategy?.topPerformingPosts?.length) return "";
+  const examples = strategy.topPerformingPosts
+    .filter((p) => p.tweetText)
+    .slice(0, 3)
+    .map(
+      (p, i) =>
+        (i + 1) +
+        ". [" + p.format + "] (" + (p.metrics?.engagementRate || 0) + "% engagement): " +
+        p.tweetText
+    )
+    .join("\n");
+  if (!examples) return "";
+  return (
+    "\nHIGH-PERFORMING EXAMPLES (these tweets got strong engagement — learn from their style):\n" +
+    examples + "\n"
+  );
+}
+
 const FORMAT_INSTRUCTIONS = {
   hook: "Write an attention-grabbing hook that makes people want to click. Lead with the most compelling part of the article.",
   insight:
@@ -16,6 +35,7 @@ export async function generateTweet({
   siteUrl,
   brandVoice,
   apiKey,
+  strategy,
 }) {
   const client = new Anthropic({ apiKey });
 
@@ -35,7 +55,7 @@ FORMAT: ${format}
 ${FORMAT_INSTRUCTIONS[format]}
 
 ${brandVoice ? "BRAND VOICE: " + brandVoice : ""}
-
+${buildExemplarSection(strategy)}
 RULES:
 - The URL counts as 23 characters on Twitter (t.co wrapping), so you have ~256 characters for text + space before the URL
 - The URL MUST be included exactly as provided
