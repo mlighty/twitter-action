@@ -37,7 +37,7 @@ export async function generateTweet({
   apiKey,
   strategy,
 }) {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: 90_000, maxRetries: 1 });
 
   const postUrl = siteUrl.replace(/\/$/, "") + "/blog/" + post.slug;
 
